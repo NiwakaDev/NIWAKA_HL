@@ -26,12 +26,15 @@ void LoadText(int argc, const char** argv, unsigned char* buff){
 }
 
 #define MAX_TC 1000
-String ts[MAX_TC+1];//トークンの内容を記憶
-int tl[MAX_TC+1];//トークンの長さ
-unsigned char tcBuff[(MAX_TC+1)*10];
-int tcs=0, tcb=0;
+String ts[MAX_TC+1];//ユニークなトークン名のポインタへの配列
+int tl[MAX_TC+1];//ユニークなトークンの長さ
+unsigned char tcBuff[(MAX_TC+1)*10];//ユニークなトークン名をフラットに並べていくバッファ
+int tcs=0, tcb=0;//tcs:ユニークなトークン列のサイズ
 int var[MAX_TC+1];
+int token_size=0;
 
+//トークンIDを取得する。
+//存在しない場合は登録して、そのIDを返す
 int GetTc(String s, int len){
     int i;
     for(i=0; i<tcs; i++){
@@ -39,64 +42,106 @@ int GetTc(String s, int len){
             break;
         }
     }
-    //末端まできたら、未登録の変数
     if(i==tcs){
         if(tcs>=MAX_TC){
-            fprintf(stderr, "too many tokens");
+            fprintf(stderr, "too many tokens\n");
             exit(EXIT_FAILURE);
         }
         strncpy(&tcBuff[tcb], s, len);
         tcBuff[tcb+len] = 0;
+        ts[i] = &tcBuff[tcb];
         tl[i] = len;
-        tcb += len + 1;
-        tcs++; 
+        tcb += len+1;
+        tcs++;
         var[i] = strtol(ts[i], 0, 0);
     }
     return i;
 }
 
-bool isAlphabetOrNumber(unsigned char ascii_code){
+bool IsAlphabetOrNumber(unsigned char ascii_code){
     if('0'<=ascii_code&&ascii_code<='9'){
         return true;
     }else if('a'<=ascii_code&&ascii_code<='z'){
         return true;
     }else if('A'<=ascii_code&&ascii_code<='Z'){
         return true;
+    }else if(ascii_code=='_'){
+        return true;
     }
     return false;
 }
 
 bool IsCtrl(unsigned char ascii_code){
-    return ascii_code==' '||ascii_code=='\t' || ascii_code == '\n' || ascii_code == '\r';
+    return ascii_code == ' ' || ascii_code == '\t' || ascii_code == '\n' || ascii_code == '\r';
 }
 
-int Parser(String s, int tc[]){
-    int i=0;
-    int j=0;//トークン列のサイズ
-    int len;
+//字句解析
+int Parser(String s, int* tc){
+    int i=0, j=0, len;
     for(;;){
-        if (IsCtrl(s[i])) {	// スペース、タブ、改行.
+        if(IsCtrl(s[i])){
             i++;
             continue;
         }
-        if (s[i] == END){
+        if(s[i]==END){
             return j;
         }
         len = 0;
-        if(strchr("(){}[];,", s[i])!=NULL){
+        if(strchr("(){}[];,", s[i]) !=NULL){
             len = 1;
-        }else if(isAlphabetOrNumber(s[i])){
-            while(isAlphabetOrNumber(s[i+len])){
+        }else if(IsAlphabetOrNumber(s[i])){
+            while(IsAlphabetOrNumber(s[i+len])){
                 len++;
-            }else if(strchr("=+-*/!%&~|<>?:.#", s[i])!=NULL){
-                while(){
-                    
-                }
             }
+        }else if(strchr("=+-*/!%&~|<>?:.#", s[i])!=NULL){
+            while(strchr("=+-*/!%&~|<>?:.#", s[i + len])!=NULL){
+                len++;
+            }
+        }else{
+            fprintf(stderr, "syntax error\n");
+            exit(EXIT_FAILURE);
         }
+        tc[j] = GetTc(&s[i], len);
+        i = i + len;
+        j++;
+    }
+}
+
+void PrintToken(int* tc){
+    for(int i=0; i<token_size; i++){
+        fprintf(stderr, "%s\n", ts[tc[i]]);
     }
 }
 
 int main(int argc, char** argv){
-
+    int pc, pc1;
+    unsigned char buff[SIZE];
+    int tc[SIZE];//ユニークでないトークン配列
+    LoadText(argc, argv, buff);
+    pc1 = Parser(buff, tc);
+    token_size = pc1;
+    //PrintToken(tc);
+    int semi = GetTc(";", 1);//semiのトークンIDを返す
+    for(pc=0; pc<pc1; pc++){
+        if(tc[pc+1]==GetTc("=", 1)&&tc[pc+3]==semi){
+            var[tc[pc]] = var[tc[pc+2]];
+        }else if(tc[pc+1]==GetTc("=", 1)&&tc[pc+3]==GetTc("+", 1)&&tc[pc+5]==semi){
+            var[tc[pc]] = var[tc[pc+2]] + var[tc[pc+4]];
+        }else if(tc[pc+1]==GetTc("=", 1)&&tc[pc+3]==GetTc("-", 1)&&tc[pc+5]==semi){
+            var[tc[pc]] = var[tc[pc+2]] - var[tc[pc+4]];
+        }else if(tc[pc+1]==GetTc("=", 1)&&tc[pc+3]==GetTc("*", 1)&&tc[pc+5]==semi){
+            var[tc[pc]] = var[tc[pc+2]] * var[tc[pc+4]];
+        }else if(tc[pc]==GetTc("print", 5)&&tc[pc + 2]==semi){
+            printf("%d\n", var[tc[pc+1]]);
+        }else{
+            goto error;
+        }
+        while(tc[pc]!=semi){
+            pc++;
+        }
+    }
+    exit(EXIT_SUCCESS);
+error:
+    fprintf(stderr, "syntax error : %s %s %s %s\n", ts[tc[pc]], ts[tc[pc + 1]], ts[tc[pc + 2]], ts[tc[pc + 3]]);
+    exit(EXIT_FAILURE);
 }

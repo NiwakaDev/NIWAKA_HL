@@ -3,4 +3,4 @@
 CC = clang
 
 hl : 
-	$(CC) -g -o hl hl.c
+	$(CC) -g -O0 -o hl hl.c
