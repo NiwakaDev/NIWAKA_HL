@@ -2,13 +2,14 @@
 #include<stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
 
 #define SIZE 10000
 #define END 0
 #define VAR_SIZE 256
+typedef unsigned char* String;
 
-
-void LoadText(int argc, const char** argv, uint8_t* buff){
+void LoadText(int argc, const char** argv, unsigned char* buff){
     FILE* input_stream;
     if(argc<2){
         fprintf(stderr, "Error: no input file\n");
@@ -24,50 +25,78 @@ void LoadText(int argc, const char** argv, uint8_t* buff){
     buff[read_size] = END;
 }
 
-void PrintBuff(uint8_t* buff){
-    for(int i=0; buff[i]!=END; i++){
-        fprintf(stderr, "%c", buff[i]);
+#define MAX_TC 1000
+String ts[MAX_TC+1];//トークンの内容を記憶
+int tl[MAX_TC+1];//トークンの長さ
+unsigned char tcBuff[(MAX_TC+1)*10];
+int tcs=0, tcb=0;
+int var[MAX_TC+1];
+
+int GetTc(String s, int len){
+    int i;
+    for(i=0; i<tcs; i++){
+        if(len==tl[i]&&strncmp(s, ts[i], len)==0){
+            break;
+        }
     }
+    //末端まできたら、未登録の変数
+    if(i==tcs){
+        if(tcs>=MAX_TC){
+            fprintf(stderr, "too many tokens");
+            exit(EXIT_FAILURE);
+        }
+        strncpy(&tcBuff[tcb], s, len);
+        tcBuff[tcb+len] = 0;
+        tl[i] = len;
+        tcb += len + 1;
+        tcs++; 
+        var[i] = strtol(ts[i], 0, 0);
+    }
+    return i;
 }
 
-bool IsCtrlChar(char ascii_code){
-    return ascii_code=='\n'||ascii_code=='\r'||ascii_code==' '||ascii_code=='\t'||ascii_code==';';
+bool isAlphabetOrNumber(unsigned char ascii_code){
+    if('0'<=ascii_code&&ascii_code<='9'){
+        return true;
+    }else if('a'<=ascii_code&&ascii_code<='z'){
+        return true;
+    }else if('A'<=ascii_code&&ascii_code<='Z'){
+        return true;
+    }
+    return false;
 }
 
-int main(const int argc, const char** argv){
-    uint8_t* buff = (uint8_t*)malloc(SIZE);
-    LoadText(argc, argv, buff);
+bool IsCtrl(unsigned char ascii_code){
+    return ascii_code==' '||ascii_code=='\t' || ascii_code == '\n' || ascii_code == '\r';
+}
 
-    int var[VAR_SIZE];
-    for(int i=0; i<VAR_SIZE; i++){
-        var[i] = 0;
-    }
-    for(int i=0; i<10; i++){
-        var['0'+i] = i;
-    }
-    for(int pc=0; buff[pc]!=END; pc++){
-        if(IsCtrlChar(buff[pc])){
+int Parser(String s, int tc[]){
+    int i=0;
+    int j=0;//トークン列のサイズ
+    int len;
+    for(;;){
+        if (IsCtrl(s[i])) {	// スペース、タブ、改行.
+            i++;
             continue;
-        }else if(buff[pc+1]=='='&&buff[pc+3]==';'){//代入
-            var[buff[pc]] = var[buff[pc+2]];
-        }else if(buff[pc+1]=='='&&buff[pc+3]=='+'&&buff[pc+5]==';'){//足し算
-            var[buff[pc]] = var[buff[pc+2]] + var[buff[pc+4]];
-        }else if(buff[pc+1]=='='&&buff[pc+3]=='-'&&buff[pc+5]==';'){//引き算
-            var[buff[pc]] = var[buff[pc+2]] - var[buff[pc+4]];
-        }else if(buff[pc+1]=='='&&buff[pc+3]=='*'&&buff[pc+5]==';'){//掛け算
-            var[buff[pc]] = var[buff[pc+2]] * var[buff[pc+4]];
-        }else if(buff[pc] == 'p'&&buff[pc + 1]=='r'&&buff[pc + 5]==' '&&buff[pc + 7] == ';'){
-            printf("%d\n", var[buff[pc+6]]);
-        }else{
-            goto error;
         }
-        while(buff[pc]!=';'){//文の末端まで進める
-            pc++;
+        if (s[i] == END){
+            return j;
+        }
+        len = 0;
+        if(strchr("(){}[];,", s[i])!=NULL){
+            len = 1;
+        }else if(isAlphabetOrNumber(s[i])){
+            while(isAlphabetOrNumber(s[i+len])){
+                len++;
+            }else if(strchr("=+-*/!%&~|<>?:.#", s[i])!=NULL){
+                while(){
+                    
+                }
+            }
         }
     }
-    goto finish;
-error:
-    fprintf(stderr, "syntax error\n");
-finish:
-    free(buff);
+}
+
+int main(int argc, char** argv){
+
 }
