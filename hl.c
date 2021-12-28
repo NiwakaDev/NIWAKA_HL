@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
+#include <time.h>
 
 #define SIZE 10000
 #define END 0
@@ -121,8 +122,13 @@ int main(int argc, char** argv){
     pc1 = Parser(buff, tc);
     token_size = pc1;
     //PrintToken(tc);
-    int semi = GetTc(";", 1);//semiのトークンIDを返す
     for(pc=0; pc<pc1; pc++){
+        if(tc[pc+1]==GetTc(":", 1)){
+            var[tc[pc]] = pc+2;//ラベルの次を示すようにする。
+        }
+    }
+    int semi = GetTc(";", 1);//semiのトークンIDを返す
+    for(pc=0; pc<pc1;){
         if(tc[pc+1]==GetTc("=", 1)&&tc[pc+3]==semi){
             var[tc[pc]] = var[tc[pc+2]];
         }else if(tc[pc+1]==GetTc("=", 1)&&tc[pc+3]==GetTc("+", 1)&&tc[pc+5]==semi){
@@ -131,6 +137,28 @@ int main(int argc, char** argv){
             var[tc[pc]] = var[tc[pc+2]] - var[tc[pc+4]];
         }else if(tc[pc+1]==GetTc("=", 1)&&tc[pc+3]==GetTc("*", 1)&&tc[pc+5]==semi){
             var[tc[pc]] = var[tc[pc+2]] * var[tc[pc+4]];
+        }else if(tc[pc+1]==GetTc(":", 1)){
+            pc += 2;
+            continue;
+        }else if(tc[pc]==GetTc("goto", 4)&&tc[pc+2]==semi){
+            pc = var[tc[pc+1]];
+            continue;
+        }else if(tc[pc]==GetTc("if", 2)&&tc[pc+1]==GetTc("(", 1)&&tc[pc+5]==GetTc(")", 1)&&tc[pc+6]==GetTc("goto", 4)&&tc[pc+8]==semi){//if ( 変数1 条件式 変数2 ) goto 
+            int label = var[tc[pc+7]];
+            int v0  = var[tc[pc+2]];//条件式の左辺
+            int v1  = var[tc[pc+4]];//条件式の右辺
+            if(tc[pc+3]==GetTc("!=", 2)&&v0!=v1){
+                pc = label;
+                continue;
+            }else if(tc[pc+3]==GetTc("==", 2)&&v0==v1){
+                pc = label;
+                continue;
+            }else if(tc[pc+3]==GetTc("<", 1)&&v0<v1){
+                pc = label;
+                continue;
+            }
+        }else if(tc[pc]==GetTc("time", 4)&&tc[pc+1]==semi){
+            printf("time: %.3f[sec]\n", clock() / (double) CLOCKS_PER_SEC);
         }else if(tc[pc]==GetTc("print", 5)&&tc[pc + 2]==semi){
             printf("%d\n", var[tc[pc+1]]);
         }else{
@@ -139,6 +167,7 @@ int main(int argc, char** argv){
         while(tc[pc]!=semi){
             pc++;
         }
+        pc++;
     }
     exit(EXIT_SUCCESS);
 error:
