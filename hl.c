@@ -10,20 +10,26 @@
 #define VAR_SIZE 256
 typedef unsigned char* String;
 
-void LoadText(int argc, const char** argv, unsigned char* buff){
-    FILE* input_stream;
-    if(argc<2){
-        fprintf(stderr, "Error: no input file\n");
-        exit(EXIT_FAILURE);
+int LoadText(String path, String t){
+    FILE *fp;
+    unsigned char s[1000];
+    int i = 0, j;
+    if (path[0] == 34) { i = 1; }
+    for (j = 0; ; j++) {
+        if (path[i + j] == 0 || path[j + i] == 34)
+            break; 
+        s[j] = path[i + j];
     }
-    input_stream = fopen(argv[1], "rt");
-    if(input_stream==NULL){
-        fprintf(stderr, "Error: fopen\n");
-        exit(EXIT_FAILURE);
+    s[j] = 0;
+    fp = fopen(s, "rt"); 
+    if (fp == 0) { 
+        printf("fopen error : %s\n", path);
+        return 1;
     }
-    int read_size = fread(buff, 1, SIZE-1, input_stream);
-    fclose(input_stream);
-    buff[read_size] = END;
+    i = fread(t, 1, SIZE-1, fp);
+    fclose(fp);
+    t[i] = END; 
+    return 0; 
 }
 
 #define MAX_TC 1000
@@ -114,12 +120,13 @@ void PrintToken(int* tc){
     }
 }
 
-int main(int argc, char** argv){
+int Run(String s){
+    clock_t t0 = clock();
     int pc, pc1;
-    unsigned char buff[SIZE];
     int tc[SIZE];//ユニークでないトークン配列
-    LoadText(argc, argv, buff);
-    pc1 = Parser(buff, tc);
+    pc1 = Parser(s, tc);
+    tc[pc1] = GetTc(";", 1);
+    pc1++;
     token_size = pc1;
     //PrintToken(tc);
     for(pc=0; pc<pc1; pc++){
@@ -158,9 +165,11 @@ int main(int argc, char** argv){
                 continue;
             }
         }else if(tc[pc]==GetTc("time", 4)&&tc[pc+1]==semi){
-            printf("time: %.3f[sec]\n", clock() / (double) CLOCKS_PER_SEC);
+            printf("time: %.3f[sec]\n", (clock()-t0) / (double) CLOCKS_PER_SEC);
         }else if(tc[pc]==GetTc("print", 5)&&tc[pc + 2]==semi){
             printf("%d\n", var[tc[pc+1]]);
+        }else if(tc[pc]==semi){
+            //semiが2回来ることがあるが、無視
         }else{
             goto error;
         }
@@ -169,8 +178,36 @@ int main(int argc, char** argv){
         }
         pc++;
     }
-    exit(EXIT_SUCCESS);
+    return 0;
 error:
     fprintf(stderr, "syntax error : %s %s %s %s\n", ts[tc[pc]], ts[tc[pc + 1]], ts[tc[pc + 2]], ts[tc[pc + 3]]);
-    exit(EXIT_FAILURE);
+    return 1;
+}
+
+int main(int argc, char** argv){
+    unsigned char buff[SIZE];
+    int i;
+    if(argc>=2){
+        if(LoadText((String)argv[1], buff)==0){
+            Run(buff);
+        }
+        exit(EXIT_SUCCESS);
+    }
+    for(;;){
+        fprintf(stderr, "\n>");
+        fgets(buff, SIZE, stdin);
+        int buff_len = strlen(buff);
+        if(strncmp(buff, "run ", 4)==0){
+            if(buff[buff_len-1]=='\n'){
+                buff[buff_len-1] = '\0';
+            }
+            if(LoadText(&buff[4], buff)==0){
+                Run(buff);
+            }
+        }else if(strncmp(buff, "exit", 4)==0){
+            exit(EXIT_SUCCESS);
+        }else{//コマンド指定なしは、与えられた文字列をそのまま実行
+            Run(buff);
+        }
+    }
 }

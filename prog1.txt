@@ -1,8 +1,6 @@
-total = 0;
-cnt   = 0;
-loop:
-    total = total + cnt;
-    print total;
-    cnt   = cnt + 1  ;
-    if (cnt<10) goto loop;
-print total;
+    i = 0;
+label:
+    i = i + 1;
+    print i;
+    if (i < 10) goto label;
+    time;
