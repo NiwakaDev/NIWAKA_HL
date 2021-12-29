@@ -157,7 +157,7 @@ void PrintToken(int* tc){
 }
 
 typedef int* IntP;
-enum _OP_KIND { OpCpy = 0, OpAdd, OpSub, OpPrint, OpGoto, OpJeq, OpJne, OpJlt, OpJge, OpJle, OpJgt, OpTime, OpEnd, OpAdd1 };
+enum _OP_KIND { OpCpy = 0, OpAdd, OpSub, OpPrint, OpGoto, OpJeq, OpJne, OpJlt, OpJge, OpJle, OpJgt, OpTime, OpEnd, OpInc };
 typedef enum _OP_KIND OP_KIND;
 IntP ic[SIZE];
 IntP* icq;//ic上で色々操作をするための作業用ポインタ
@@ -186,6 +186,12 @@ int Compile(String s){
             PutIc(OpPrint, &var[tc[wpc[0]]], 0, 0, 0);
         }else if(phrCmp(3, ";", pc)){
             //何もしない。
+        }else if(phrCmp(4, "!!*0 = !!*1 + !!*2;", pc)){
+            PutIc(OpAdd, &var[tc[wpc[0]]], &var[tc[wpc[1]]], &var[tc[wpc[2]]], 0);
+        }else if(phrCmp(5, "!!*0 = !!*1 - !!*2", pc)){
+            PutIc(OpSub, &var[tc[wpc[0]]], &var[tc[wpc[1]]], &var[tc[wpc[2]]], 0);
+        }else if(phrCmp(6, "!!*0++;", pc)){//INC、川合さんは高速化のために導入していたが単純にINC命令として導入
+            PutIc(OpInc, &var[tc[wpc[0]]], 0, 0, 0);
         }else{
             goto error;
         }
@@ -212,9 +218,17 @@ void Execute(){
                 *icp[1] = *icp[2] + *icp[3];
                 icp += 5;
                 continue;
+            case OpSub:
+                *icp[1] = *icp[2] - *icp[3];
+                icp += 5;
+                continue;
             case OpPrint:
                 printf("%d\n", *icp[1]);
                 icp += 5;
+                continue;
+            case OpInc:
+                *icp[1] = *icp[1]+1;
+                icp+=5;
                 continue;
             case OpEnd:
                 return;
