@@ -192,6 +192,11 @@ int Compile(String s){
             PutIc(OpSub, &var[tc[wpc[0]]], &var[tc[wpc[1]]], &var[tc[wpc[2]]], 0);
         }else if(phrCmp(6, "!!*0++;", pc)){//INC、川合さんは高速化のために導入していたが単純にINC命令として導入
             PutIc(OpInc, &var[tc[wpc[0]]], 0, 0, 0);
+        }else if(phrCmp(7, "!!*0:", pc)){//ラベル命令
+            var[tc[wpc[0]]] = icq-ic;//icqには次に命令を格納すべき番地を示している。
+            //ラベル自体はVMに実行させるものではない。
+        }else if(phrCmp(8, "goto !!*0;", pc)){//goto命令
+            PutIc(OpGoto, &var[tc[wpc[0]]], 0, 0, 0);
         }else{
             goto error;
         }
@@ -199,12 +204,19 @@ int Compile(String s){
     }
     PutIc(OpEnd, 0, 0, 0, 0);
     icq1 = icq;
+    for(icq=ic; icq<icq1; icq+=5){
+        i = (int)icq[0];
+        if(OpGoto<=i&&i<=OpJgt){
+            icq[1] = *icq[1]+ic;
+        }
+    }
     return icq1-ic;
     error:
         fprintf(stderr, "Syntax error : %s %s %s %s\n", ts[tc[pc]], ts[tc[pc + 1]], ts[tc[pc + 2]], ts[tc[pc + 3]]);
         return -1;
 }
 
+//仮想マシン
 void Execute(){
     clock_t t0 = clock();
     IntP* icp = ic;//ic配列の先頭の番地を入れる
@@ -229,6 +241,9 @@ void Execute(){
             case OpInc:
                 *icp[1] = *icp[1]+1;
                 icp+=5;
+                continue;
+            case OpGoto:
+                icp = icp[1];//*icp[1]にしない理由は番地を代入するため。
                 continue;
             case OpEnd:
                 return;
