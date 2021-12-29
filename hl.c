@@ -39,6 +39,42 @@ unsigned char tcBuff[(MAX_TC+1)*10];//ユニークなトークン名をフラッ
 int tcs=0, tcb=0;//tcs:ユニークなトークン列のサイズ
 int var[MAX_TC+1];
 int token_size=0;
+int tc[SIZE];//ユニークでないトークン配列
+
+enum { TcSemi = 0, TcDot, TcWiCard, Tc0, Tc1, Tc2, Tc3, Tc4, Tc5, Tc6, Tc7, Tc8, TcEEq, TcNEq, TcLt, TcGe, TcLe, TcGt };
+char tcInit[] = "; . !!* 0 1 2 3 4 5 6 7 8 == != < >= <= >";
+
+int phrCmp_tc[32*100];
+int ppc1, wpc[9];//wpcはワイルドカードの直後に置かれたトークンの場所を管理する。
+
+int phrCmp(int pid, String phr, int pc)
+{
+    int i0 = pid * 32, i, i1, j;
+    if (phrCmp_tc[i0 + 31] == 0) {//0でないならキャッシュ済み
+        i1 = Parser(phr, &phrCmp_tc[i0]);
+        phrCmp_tc[i0 + 31] = i1;//末尾にはトークン列の長さが入る
+    }
+    i1 = phrCmp_tc[i0 + 31];
+    for (i = 0; i < i1; i++) {
+        if (phrCmp_tc[i0 + i] == TcWiCard) {
+            i++;
+            //!!*0ならば、0のトークン番号を取得する。
+            //0のトークン番号はTc0と一致する。
+            //Tc0-Tc0により、jは0になる。
+            //!!*1ならば、1のトークン番号を取得する。
+            //1のトークン番号はTc1と一致する。
+            //Tc1-Tc0により、jは1になる。
+            j = phrCmp_tc[i0 + i] - Tc0; // 後続の番号を取得.
+            wpc[j] = pc;
+            pc++;
+            continue;
+        }
+        if (phrCmp_tc[i0 + i] != tc[pc]) return 0; // マッチせず.
+        pc++;
+    }
+    ppc1 = pc;
+    return 1; // マッチした.
+}
 
 //トークンIDを取得する。
 //存在しない場合は登録して、そのIDを返す
@@ -79,10 +115,11 @@ bool IsAlphabetOrNumber(unsigned char ascii_code){
 }
 
 bool IsCtrl(unsigned char ascii_code){
-    return ascii_code == ' ' || ascii_code == '\t' || ascii_code == '\n' || ascii_code == '\r';
+    return ascii_code == ' ' || ascii_code == '\t' || ascii_code == '\n' || ascii_code == '\r'||ascii_code==0x12;
 }
 
 //字句解析
+// "; . !!* 0 1 2 3 4 5 6 7 8 == != < >= <= >";
 int Parser(String s, int* tc){
     int i=0, j=0, len;
     for(;;){
@@ -101,11 +138,11 @@ int Parser(String s, int* tc){
                 len++;
             }
         }else if(strchr("=+-*/!%&~|<>?:.#", s[i])!=NULL){
-            while(strchr("=+-*/!%&~|<>?:.#", s[i + len])!=NULL){
+            while(strchr("=+-*/!%&~|<>?:.#", s[i + len])!=NULL&&(s[i+len]!='\0')){//strchrは文字列の終端\0も判定していまう。なので、それを防ぐためにs[i+len]!='\0'を書いてる。
                 len++;
             }
         }else{
-            fprintf(stderr, "syntax error\n");
+            fprintf(stderr, "syntax error:\n", s[i]);
             exit(EXIT_FAILURE);
         }
         tc[j] = GetTc(&s[i], len);
@@ -123,60 +160,57 @@ void PrintToken(int* tc){
 int Run(String s){
     clock_t t0 = clock();
     int pc, pc1;
-    int tc[SIZE];//ユニークでないトークン配列
     pc1 = Parser(s, tc);
-    tc[pc1] = GetTc(";", 1);
+    tc[pc1] = TcSemi;
     pc1++;
     token_size = pc1;
     //PrintToken(tc);
     for(pc=0; pc<pc1; pc++){
-        if(tc[pc+1]==GetTc(":", 1)){
-            var[tc[pc]] = pc+2;//ラベルの次を示すようにする。
+        if (phrCmp(0, "!!*0:", pc)){//pcは番地でないので、呼び出し先で変更しても、呼び出し元ではラベルを示している。
+            //var[tc[pc]] = pc+2;//ラベルの次を示すようにする。
+            var[tc[pc]] = ppc1; // ラベル定義命令の次のpc値を記憶させておく.
         }
     }
     int semi = GetTc(";", 1);//semiのトークンIDを返す
+    tc[pc1++] = TcSemi; 
     for(pc=0; pc<pc1;){
-        if(tc[pc+1]==GetTc("=", 1)&&tc[pc+3]==semi){
-            var[tc[pc]] = var[tc[pc+2]];
-        }else if(tc[pc+1]==GetTc("=", 1)&&tc[pc+3]==GetTc("+", 1)&&tc[pc+5]==semi){
-            var[tc[pc]] = var[tc[pc+2]] + var[tc[pc+4]];
-        }else if(tc[pc+1]==GetTc("=", 1)&&tc[pc+3]==GetTc("-", 1)&&tc[pc+5]==semi){
-            var[tc[pc]] = var[tc[pc+2]] - var[tc[pc+4]];
-        }else if(tc[pc+1]==GetTc("=", 1)&&tc[pc+3]==GetTc("*", 1)&&tc[pc+5]==semi){
-            var[tc[pc]] = var[tc[pc+2]] * var[tc[pc+4]];
-        }else if(tc[pc+1]==GetTc(":", 1)){
-            pc += 2;
-            continue;
-        }else if(tc[pc]==GetTc("goto", 4)&&tc[pc+2]==semi){
-            pc = var[tc[pc+1]];
-            continue;
-        }else if(tc[pc]==GetTc("if", 2)&&tc[pc+1]==GetTc("(", 1)&&tc[pc+5]==GetTc(")", 1)&&tc[pc+6]==GetTc("goto", 4)&&tc[pc+8]==semi){//if ( 変数1 条件式 変数2 ) goto 
-            int label = var[tc[pc+7]];
-            int v0  = var[tc[pc+2]];//条件式の左辺
-            int v1  = var[tc[pc+4]];//条件式の右辺
-            if(tc[pc+3]==GetTc("!=", 2)&&v0!=v1){
+        if(phrCmp(1, "!!*0 = !!*1;", pc)){
+            var[tc[wpc[0]]] = var[tc[wpc[1]]];
+        }else if(phrCmp(2, "!!*0 = !!*1 + !!*2;", pc)){
+            var[tc[wpc[0]]] = var[tc[wpc[1]]] + var[tc[wpc[2]]];
+        }else if(phrCmp(3, "!!*0 = !!*1 - !!*2;", pc)){
+            var[tc[wpc[0]]] = var[tc[wpc[1]]] - var[tc[wpc[2]]];
+        }else if(phrCmp(4, "!!*0 = !!*1 * !!*2;", pc)){
+            var[tc[wpc[0]]] = var[tc[wpc[1]]] * var[tc[wpc[2]]];
+        }else if(phrCmp(0, "!!*0:", pc)){
+            //forループの最後でpcは変更される
+        }else if(phrCmp(5, "goto !!*0;", pc)){
+            pc = var[tc[wpc[0]]];
+            continue;//forループの最後でppcに変更される。それを防ぐためにcontinue
+        }else if (phrCmp( 6, "if (!!*0 !!*1 !!*2) goto !!*3;", pc) && TcEEq <= tc[wpc[1]] && tc[wpc[1]] <= TcGt) {
+            int label = var[tc[wpc[3]]], left = var[tc[wpc[0]]], cc = tc[wpc[1]], right = var[tc[wpc[2]]];
+            if(cc == TcEEq && left != right){ 
                 pc = label;
-                continue;
-            }else if(tc[pc+3]==GetTc("==", 2)&&v0==v1){
-                pc = label;
-                continue;
-            }else if(tc[pc+3]==GetTc("<", 1)&&v0<v1){
+                continue; 
+            }
+            if(cc == TcNEq && left == right){ 
                 pc = label;
                 continue;
             }
-        }else if(tc[pc]==GetTc("time", 4)&&tc[pc+1]==semi){
-            printf("time: %.3f[sec]\n", (clock()-t0) / (double) CLOCKS_PER_SEC);
-        }else if(tc[pc]==GetTc("print", 5)&&tc[pc + 2]==semi){
-            printf("%d\n", var[tc[pc+1]]);
-        }else if(tc[pc]==semi){
+            if(cc == TcLt  && left <  right){ 
+                pc = label;
+                continue;
+            }
+        }else if (phrCmp( 7, "time;", pc)) {
+            printf("time: %.3f[sec]\n", (clock() - t0) / (double) CLOCKS_PER_SEC);
+        }else if(phrCmp(8, "print !!*0;", pc)){
+            printf("%d\n", var[tc[wpc[0]]]);
+        }else if (phrCmp(9, ";", pc)) {
             //semiが2回来ることがあるが、無視
         }else{
             goto error;
         }
-        while(tc[pc]!=semi){
-            pc++;
-        }
-        pc++;
+        pc = ppc1;
     }
     return 0;
 error:
@@ -187,6 +221,7 @@ error:
 int main(int argc, char** argv){
     unsigned char buff[SIZE];
     int i;
+    Parser(tcInit, tc);
     if(argc>=2){
         if(LoadText((String)argv[1], buff)==0){
             Run(buff);
