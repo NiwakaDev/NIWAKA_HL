@@ -119,7 +119,6 @@ bool IsCtrl(unsigned char ascii_code){
 }
 
 //字句解析
-// "; . !!* 0 1 2 3 4 5 6 7 8 == != < >= <= >";
 int Parser(String s, int* tc){
     int i=0, j=0, len;
     for(;;){
@@ -157,65 +156,78 @@ void PrintToken(int* tc){
     }
 }
 
-int Run(String s){
-    clock_t t0 = clock();
-    int pc, pc1;
+typedef int* IntP;
+enum _OP_KIND { OpCpy = 0, OpAdd, OpSub, OpPrint, OpGoto, OpJeq, OpJne, OpJlt, OpJge, OpJle, OpJgt, OpTime, OpEnd, OpAdd1 };
+typedef enum _OP_KIND OP_KIND;
+IntP ic[SIZE];
+IntP* icq;//ic上で色々操作をするための作業用ポインタ
+
+//命令をここに書き込む
+void PutIc(OP_KIND op, IntP p1, IntP p2, IntP p3, IntP p4){
+    icq[0] = (IntP)op;//opはポインタではないが、便宜上ポインタとキャストしておいて、ポインタの配列に格納しておく
+    icq[1] = p1;
+    icq[2] = p2;
+    icq[3] = p3;
+    icq[4] = p4;
+    icq    += 5;
+}
+
+int Compile(String s){
+    int pc, pc1, i;
+    IntP* icq1;
     pc1 = Parser(s, tc);
-    tc[pc1] = TcSemi;
-    pc1++;
-    token_size = pc1;
-    //PrintToken(tc);
-    for(pc=0; pc<pc1; pc++){
-        if (phrCmp(0, "!!*0:", pc)){//pcは番地でないので、呼び出し先で変更しても、呼び出し元ではラベルを示している。
-            //var[tc[pc]] = pc+2;//ラベルの次を示すようにする。
-            var[tc[pc]] = ppc1; // ラベル定義命令の次のpc値を記憶させておく.
-        }
-    }
-    int semi = GetTc(";", 1);//semiのトークンIDを返す
-    tc[pc1++] = TcSemi; 
+    tc[pc1++] = TcSemi;
+    tc[pc1] = tc[pc1 + 1] = tc[pc1 + 2] = tc[pc1 + 3] = TcDot;    
+    icq = ic;
     for(pc=0; pc<pc1;){
-        if(phrCmp(1, "!!*0 = !!*1;", pc)){
-            var[tc[wpc[0]]] = var[tc[wpc[1]]];
-        }else if(phrCmp(2, "!!*0 = !!*1 + !!*2;", pc)){
-            var[tc[wpc[0]]] = var[tc[wpc[1]]] + var[tc[wpc[2]]];
-        }else if(phrCmp(3, "!!*0 = !!*1 - !!*2;", pc)){
-            var[tc[wpc[0]]] = var[tc[wpc[1]]] - var[tc[wpc[2]]];
-        }else if(phrCmp(4, "!!*0 = !!*1 * !!*2;", pc)){
-            var[tc[wpc[0]]] = var[tc[wpc[1]]] * var[tc[wpc[2]]];
-        }else if(phrCmp(0, "!!*0:", pc)){
-            //forループの最後でpcは変更される
-        }else if(phrCmp(5, "goto !!*0;", pc)){
-            pc = var[tc[wpc[0]]];
-            continue;//forループの最後でppcに変更される。それを防ぐためにcontinue
-        }else if (phrCmp( 6, "if (!!*0 !!*1 !!*2) goto !!*3;", pc) && TcEEq <= tc[wpc[1]] && tc[wpc[1]] <= TcGt) {
-            int label = var[tc[wpc[3]]], left = var[tc[wpc[0]]], cc = tc[wpc[1]], right = var[tc[wpc[2]]];
-            if(cc == TcEEq && left != right){ 
-                pc = label;
-                continue; 
-            }
-            if(cc == TcNEq && left == right){ 
-                pc = label;
-                continue;
-            }
-            if(cc == TcLt  && left <  right){ 
-                pc = label;
-                continue;
-            }
-        }else if (phrCmp( 7, "time;", pc)) {
-            printf("time: %.3f[sec]\n", (clock() - t0) / (double) CLOCKS_PER_SEC);
-        }else if(phrCmp(8, "print !!*0;", pc)){
-            printf("%d\n", var[tc[wpc[0]]]);
-        }else if (phrCmp(9, ";", pc)) {
-            //semiが2回来ることがあるが、無視
+        if(phrCmp(1, "!!*0 = !!*1;", pc)){//単純代入
+            PutIc(OpCpy, &var[tc[wpc[0]]], &var[tc[wpc[1]]], 0, 0);
+        }else if(phrCmp(2, "print !!*0;", pc)){
+            PutIc(OpPrint, &var[tc[wpc[0]]], 0, 0, 0);
+        }else if(phrCmp(3, ";", pc)){
+            //何もしない。
         }else{
             goto error;
         }
         pc = ppc1;
     }
+    PutIc(OpEnd, 0, 0, 0, 0);
+    icq1 = icq;
+    return icq1-ic;
+    error:
+        fprintf(stderr, "Syntax error : %s %s %s %s\n", ts[tc[pc]], ts[tc[pc + 1]], ts[tc[pc + 2]], ts[tc[pc + 3]]);
+        return -1;
+}
+
+void Execute(){
+    clock_t t0 = clock();
+    IntP* icp = ic;//ic配列の先頭の番地を入れる
+    for(;;){
+        switch ((OP_KIND)icp[0]){
+            case OpCpy:
+                *icp[1] = *icp[2];
+                icp += 5;
+                continue;
+            case OpAdd:
+                *icp[1] = *icp[2] + *icp[3];
+                icp += 5;
+                continue;
+            case OpPrint:
+                printf("%d\n", *icp[1]);
+                icp += 5;
+                continue;
+            case OpEnd:
+                return;
+        }
+    }
+}
+
+int Run(String s){
+    if(Compile(s)<0){
+        return 1;
+    }
+    Execute();
     return 0;
-error:
-    fprintf(stderr, "syntax error : %s %s %s %s\n", ts[tc[pc]], ts[tc[pc + 1]], ts[tc[pc + 2]], ts[tc[pc + 3]]);
-    return 1;
 }
 
 int main(int argc, char** argv){
