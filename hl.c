@@ -197,6 +197,8 @@ int Compile(String s){
             //ラベル自体はVMに実行させるものではない。
         }else if(phrCmp(8, "goto !!*0;", pc)){//goto命令
             PutIc(OpGoto, &var[tc[wpc[0]]], 0, 0, 0);
+        }else if(phrCmp(9, "if (!!*0 !!*1 !!*2) goto !!*3;", pc)&&TcEEq <= tc[wpc[1]] && tc[wpc[1]] <= TcLt){
+            PutIc(OpJeq+(tc[wpc[1]] - TcEEq), &var[tc[wpc[3]]], &var[tc[wpc[0]]], &var[tc[wpc[2]]], 0);
         }else{
             goto error;
         }
@@ -244,6 +246,27 @@ void Execute(){
                 continue;
             case OpGoto:
                 icp = icp[1];//*icp[1]にしない理由は番地を代入するため。
+                continue;
+            case OpJeq:
+                if(*icp[2]==*icp[3]){
+                    icp = icp[1];
+                    continue;
+                }
+                icp+=5;
+                continue;
+            case OpJne:
+                if(*icp[2]!=*icp[3]){
+                    icp = icp[1];
+                    continue;
+                }
+                icp+=5;
+                continue;
+            case OpJlt:
+                if(*icp[2]<*icp[3]){
+                    icp = icp[1];
+                    continue;
+                }
+                icp+=5;
                 continue;
             case OpEnd:
                 return;

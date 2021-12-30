@@ -1,4 +1,5 @@
-    i = 10;
-    goto label;
+    i = 1;
 label:
     print i;
+    i++;
+    if (i<1000) goto label;
